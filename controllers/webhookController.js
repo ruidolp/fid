@@ -1,4 +1,6 @@
 import { config } from '../config/index.js';
+import { pool } from '../services/db.js';
+
 import { sendTextMessage } from '../services/whatsappService.js';
 
 export const verifyWebhook = (req, res) => {
@@ -32,11 +34,10 @@ export const handleWebhookEvent = async (req, res) => {
 
       // 🔽 Registro en base de datos
       try {
-        const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'desconocida';
-        await pool.query('INSERT INTO registro (ip) VALUES ($1)', [clientIp]);
-        console.log(`📝 IP registrada: ${clientIp}`);
-      } catch (dbErr) {
-        console.error('❌ Error al registrar IP:', dbErr);
+        await pool.query('INSERT INTO registro (telefono) VALUES ($1)', [from]);
+        console.log('📦 Número registrado en base de datos:', from);
+      } catch (error) {
+        console.error('❌ Error al registrar número:', error);
       }
 
       const response = await sendTextMessage(phoneNumberId, from, '¿Cuál es tu nombre?');
