@@ -3,6 +3,7 @@ import { pool } from '../services/db.js';
 
 import { sendTextMessage } from '../services/whatsappService.js';
 
+// Validación del endpoint para META
 export const verifyWebhook = (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
@@ -17,6 +18,7 @@ export const verifyWebhook = (req, res) => {
   }
 };
 
+// Recepción del mensaje
 export const handleWebhookEvent = async (req, res) => {
   console.log('📨 Mensaje recibido:', JSON.stringify(req.body, null, 2));
 
