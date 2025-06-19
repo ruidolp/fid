@@ -30,6 +30,15 @@ export const handleWebhookEvent = async (req, res) => {
 
       console.log(`📥 Nuevo mensaje de ${from}: "${text}"`);
 
+      // 🔽 Registro en base de datos
+      try {
+        const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'desconocida';
+        await pool.query('INSERT INTO registro (ip) VALUES ($1)', [clientIp]);
+        console.log(`📝 IP registrada: ${clientIp}`);
+      } catch (dbErr) {
+        console.error('❌ Error al registrar IP:', dbErr);
+      }
+
       const response = await sendTextMessage(phoneNumberId, from, '¿Cuál es tu nombre?');
       console.log('✅ Respuesta enviada:', response);
     }
