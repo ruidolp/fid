@@ -1,10 +1,8 @@
-import { sendTextMessage } from './whatsappService.js';
-import { pool } from './db.js';
 import { logger } from '../utils/logger.js';
+import { handleIncomingMessage } from './interactionHandler.js';
 
 /**
  * Procesa el cuerpo recibido desde Meta y ejecuta acciones correspondientes
- * @param {Object} body - Cuerpo del webhook
  */
 export async function processIncomingMessage(body) {
   const entry = body.entry?.[0];
@@ -17,15 +15,7 @@ export async function processIncomingMessage(body) {
     const text = value.messages[0].text?.body;
 
     logger.info(`📥 Nuevo mensaje de ${from}: "${text}"`);
-
-    try {
-      await pool.query('INSERT INTO registro (telefono) VALUES ($1)', [from]);
-      logger.info('📦 Número registrado en base de datos:', from);
-    } catch (error) {
-      logger.error('❌ Error al registrar número:', error);
-    }
-
-    await sendTextMessage(phoneNumberId, from, '¿Cuál es tu nombre?');
+    await handleIncomingMessage(from, text, phoneNumberId);
   }
 
   if (value?.statuses?.length > 0) {

@@ -1,70 +1,29 @@
 import { config } from '../config/index.js';
-import { pool } from '../services/db.js';
+import { processIncomingMessage } from '../services/messageProcessor.js';
+import { logger } from '../utils/logger.js';
 
-import { sendTextMessage } from '../services/whatsappService.js';
-
-// Validación del endpoint para META
 export const verifyWebhook = (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
   if (mode === 'subscribe' && token === config.verifyToken) {
-    console.log('✅ Webhook verificado');
+    logger.info('✅ Webhook verificado');
     res.status(200).send(challenge);
   } else {
-    console.log('❌ Webhook no verificado');
+    logger.warn('❌ Webhook no verificado');
     res.sendStatus(403);
   }
 };
 
-// Recepción del mensaje
 export const handleWebhookEvent = async (req, res) => {
-  console.log('📨 Mensaje recibido:', JSON.stringify(req.body, null, 2));
+  logger.info('📨 Mensaje recibido:', req.body);
 
   try {
-    const entry = req.body.entry?.[0];
-    const change = entry?.changes?.[0];
-    const value = change?.value;
-
-    if (value?.messages?.length > 0) {
-      const phoneNumberId = value.metadata.phone_number_id;
-      const from = value.messages[0].from;
-      const text = value.messages[0].text?.body;
-
-      console.log(`📥 Nuevo mensaje de ${from}: "${text}"`);
-
-      // 🔽 Registro en base de datos
-      try {
-        await pool.query('INSERT INTO registro (telefono) VALUES ($1)', [from]);
-        console.log('📦 Número registrado en base de datos:', from);
-      } catch (error) {
-        console.error('❌ Error al registrar número:', error);
-      }
-
-      const response = await sendTextMessage(phoneNumberId, from, '¿Cuál es tu nombre?');
-      console.log('✅ Respuesta enviada:', response);
-    }
-
-    if (value?.statuses?.length > 0) {
-      const status = value.statuses[0];
-      console.log(`📦 Estado de mensaje:
-  🆔 ID: ${status.id}
-  📬 Destinatario: ${status.recipient_id}
-  📈 Estado: ${status.status}
-  🕓 Timestamp: ${status.timestamp}`);
-
-      if (status.conversation) {
-        console.log(`  💬 Conversación ID: ${status.conversation.id}`);
-      }
-      if (status.pricing) {
-        console.log(`  💵 Categoría: ${status.pricing.category}`);
-      }
-    }
-
+    await processIncomingMessage(req.body);
     res.sendStatus(200);
   } catch (err) {
-    console.error('❌ Error procesando webhook:', err);
+    logger.error('❌ Error procesando webhook:', err);
     res.sendStatus(500);
   }
 };
