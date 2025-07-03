@@ -1,10 +1,13 @@
 import {
   createUserIfNotExists,
   updateUserProfile,
-  getAnswersFromActiveConversation
-} from '../userService.js';
-
-import { sendTextMessage } from '../whatsappService.js';
+  getAnswersFromActiveConversation,
+  isUserRegistered
+} from '../users.js';
+import { sendFixedMessage } from '../messaging.js';
+import { sendTextMessage } from '../whatsapp.js';
+import { capitalizeFirstLetter } from '../../utils/textUtils.js';
+import { expireUserMenus, sendInitialMenu } from '../menu/service.js';
 
 /**
  * Diccionario de efectos por paso de flujo
@@ -28,12 +31,14 @@ const effectHandlers = {
 
   CONFIGURE_CLUB: async (phone, _input, phoneNumberId) => {
     await updateUserProfile(phone, { joined_club: true });
+    const user = await isUserRegistered(phone);
 
-    await sendTextMessage(
-      phoneNumberId,
-      phone,
-      '🎯 ¡Gracias! Hemos terminado tu registro exitosamente. Si necesitas ayuda, escribe "menú".'
-    );
+  await sendFixedMessage('registroUser.clubConfirmacion', phone, phoneNumberId,{nombre: capitalizeFirstLetter(user.name)});
+  await sendFixedMessage('registroUser.menuInstruccion', phone, phoneNumberId);
+ },
+  MENU_SINCLUB: async (phone, _input, phoneNumberId) => {
+    await expireUserMenus(phone);
+    await sendInitialMenu(phone, phoneNumberId, 'menu_sinclub');
   }
 };
 

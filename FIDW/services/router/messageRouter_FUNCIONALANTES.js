@@ -15,10 +15,11 @@ import {
 } from '../menu/service.js';
 import { sendTextMessage } from '../whatsapp.js';
 import { sendGreeting, sendFixedMessage } from '../messaging.js';
-import { capitalizeFirstLetter } from '../../utils/textUtils.js';
-import { handleClubInscription } from '../users.js';
 
-
+/**
+ * Enrutador principal de mensajes entrantes.
+ * Evalúa estado del usuario, flujo o menú, y decide cómo manejarlo.
+ */
 export const routeMessage = async (phone, message, phoneNumberId) => {
   console.log('📦 Mensaje completo recibido:', JSON.stringify(message, null, 2));
   try {
@@ -35,22 +36,20 @@ export const routeMessage = async (phone, message, phoneNumberId) => {
     }
 
     if (!normalized) {
-      await sendFixedMessage('fallback.opcionDesconocida', phone, phoneNumberId);
+      await sendTextMessage(phoneNumberId, phone, '⚠️ No se pudo entender tu mensaje.');
       return;
     }
 
-    // 1. FLUJO ACTIVO
+    // 1. FLUJO ACTIVO → procesar flujo
     const activeFlow = await getActiveFlowForUser(phone);
     if (activeFlow) {
-      console.log('➡️ En flujo activo');
       await resolveFlowStep(phone, normalized, phoneNumberId);
       return;
     }
 
-    // 2. MENÚ ACTIVO
+    // 2. MENÚ ACTIVO → procesar selección interactiva
     const activeMenu = await getActiveMenuForUser(phone);
     if (activeMenu) {
-      console.log('➡️ En menú activo');
       const type = message?.type;
       const interactive = message?.interactive;
 
@@ -66,50 +65,80 @@ export const routeMessage = async (phone, message, phoneNumberId) => {
       if (optionId) {
         await handleMenuSelection(optionId, phone, phoneNumberId);
       } else {
-        await sendFixedMessage('fallback.seleccionInvalida', phone, phoneNumberId);
+        await sendTextMessage(phoneNumberId, phone, '⚠️ No se pudo procesar tu selección.');
       }
       return;
     }
 
-    // 3. Palabra clave especial: "club"
-    if (normalized === 'club') {
-      await handleClubInscription(phone, phoneNumberId);
+    // 3. FLUJO DETECTADO POR PALABRA CLAVE
+    const matchedFlow = await getFlowByKeyword(normalized);
+    if (matchedFlow) {
+      if (matchedFlow === 'registro') {
+        let user = await isUserRegistered(phone);
+
+        if (user) {
+          await expireUserFlows(user.id);
+        } else {
+          await createUserIfNotExists(phone);
+          user = await isUserRegistered(phone);
+        }
+
+        if (!user.name) {
+          await sendFixedMessage('saludos.sinNombre', phone, phoneNumberId);
+          await startUserFlow(phone, 'registro', 10);
+          await resolveFlowStep(phone, '', phoneNumberId);
+          return;
+        }
+
+        if (!user.joined_club) {
+          await updateUserProfile(phone, { joined_club: true });
+          await sendTextMessage(
+            phoneNumberId,
+            phone,
+            `${user.name} te hemos registrado exitosamente. Si necesitas ayuda, escribe "menú".`
+          );
+          return;
+        }
+
+        await sendTextMessage(
+          phoneNumberId,
+          phone,
+          `Hola ${user.name}, un gusto verte nuevamente 😊`
+        );
+        return;
+      }
+
+      // Otros flujos a futuro
+      await sendTextMessage(phoneNumberId, phone, 'Opción reconocida pero aún no implementada.');
       return;
     }
-    // 4. Usuario general
+
+    // 4. MENÚ DETECTADO POR PALABRA CLAVE
+    const matchedMenu = await getMenuByKeyword(normalized);
+    if (matchedMenu) {
+      await expireUserMenus(phone);
+      await sendGreeting(phone, phoneNumberId);
+      await sendInitialMenu(phone, phoneNumberId, matchedMenu);
+      return;
+    }
+
+    // 5. ¿Usuario registrado? → menú por defecto
     let user = await isUserRegistered(phone);
     if (!user) {
       await createUserIfNotExists(phone);
       user = await isUserRegistered(phone);
     }
 
-    // 4a. Sin nombre → iniciar flujo obtenernombre
-    if (!user.name) {
-      console.log('➡️ Usuario sin nombre → iniciar flujo obtenernombre');
-      await sendFixedMessage('saludos.sinNombreOtros', phone, phoneNumberId);
-      await startUserFlow(phone, 'obtenernombre', 10);
-      await resolveFlowStep(phone, '', phoneNumberId);
-      return;
-    }
-
-    // 4b. Nombre con joined_club → mostrar menú registrado
-    if (user.joined_club) {
-      console.log('➡️ Usuario con nombre y joined → menú registrado');
+    if (user?.name) {
       await expireUserMenus(phone);
       await sendGreeting(phone, phoneNumberId);
       await sendInitialMenu(phone, phoneNumberId, 'menu_registrado');
       return;
     }
 
-    // 4c. Nombre sin joined_club → mostrar menú sin club
-    console.log('➡️ Usuario con nombre pero sin joined → menú sinclub');
-    await expireUserMenus(phone);
-    await sendGreeting(phone, phoneNumberId);
-    await sendInitialMenu(phone, phoneNumberId, 'menu_sinclub');
-    return;
-
+    // 6. Fallback
+    await sendFixedMessage('fallback.opcionDesconocida', phone, phoneNumberId);
   } catch (error) {
     console.error('❌ Error en routeMessage:', error);
-    await sendFixedMessage('errores.sistema', phone, phoneNumberId);
   }
 };

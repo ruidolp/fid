@@ -12,8 +12,8 @@ export async function processIncomingMessage(body) {
   if (value?.messages?.length > 0) {
     const phoneNumberId = value.metadata.phone_number_id;
     const from = value.messages[0].from;
-    const text = value.messages[0].text?.body;
+    const fullMessage = value.messages[0]; // mensaje completo, no extraído
 
-    await routeMessage(from, text, phoneNumberId);
+    await routeMessage(from, fullMessage, phoneNumberId);
   }
 }

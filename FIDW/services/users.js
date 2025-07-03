@@ -5,8 +5,10 @@ import {
   INSERT_USER,
   GET_ACTIVE_ANSWERS_BY_PHONE
 } from '../database/queries.js';
-
-
+import { sendFixedMessage } from './messaging.js';
+import { capitalizeFirstLetter } from '../utils/textUtils.js';
+import { startUserFlow } from './flows/service.js';
+import { resolveFlowStep } from './flows/resolver.js';
 /**
  * Verifica si el usuario está registrado en la base de datos.
  * @param {string} phone - Número de teléfono del usuario
@@ -76,4 +78,39 @@ export const getAnswersFromActiveConversation = async (phone) => {
     console.error('❌ Error en getAnswersFromActiveConversation:', error);
     return {};
   }
+};
+
+
+export const handleClubInscription = async (phone, phoneNumberId) => {
+  let user = await isUserRegistered(phone);
+
+  if (!user) {
+    await createUserIfNotExists(phone);
+    user = await isUserRegistered(phone);
+  }
+
+  if (!user.name) {
+    console.log('➡️ CLUB: usuario sin nombre → iniciar flujo registro');
+    await sendFixedMessage('saludos.sinNombre', phone, phoneNumberId);
+    await startUserFlow(phone, 'registro', 10);
+    await resolveFlowStep(phone, '', phoneNumberId);
+    return;
+  }
+
+  if (user.joined_club) {
+    console.log('➡️ CLUB: ya está en el club → mensaje informativo');
+    await sendFixedMessage('registroUser.yaEnClub', phone, phoneNumberId, { 
+      nombre: capitalizeFirstLetter(user.name) 
+    });
+    return;
+  }
+
+  console.log('➡️ CLUB: usuario con nombre pero sin joined_club → marcar joined_club como true');
+  await updateUserProfile(phone, { joined_club: true });
+  await sendFixedMessage('registroUser.clubConfirmacion', phone, phoneNumberId, { 
+    nombre: capitalizeFirstLetter(user.name) 
+  });
+  await sendFixedMessage('registroUser.menuInstruccion', phone, phoneNumberId, { 
+    nombre: capitalizeFirstLetter(user.name) 
+  });
 };
